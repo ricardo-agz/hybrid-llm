@@ -307,7 +307,7 @@ function App() {
             <strong>What is a distributed model?</strong> Notice how some of the tokens generated are red and some are blue, this is because different models were used to generate these tokens. A small model is used as the default until a point of low confidence is reached, at which point a larger model will be swapped in to continue generating tokens until a point of high confidence is reached and the small model can be swapped back in. This process is repeated throughout the length of the query.
           </p>
           <p className="mt-2">
-            <strong>Why is this cool?</strong> The app allows you to have interactive conversations with an AI assistant. It processes your inputs, generates thoughtful responses, and can handle various topics and queries.
+            <strong>Why is this cool?</strong> This architecture allows us to offload a heavy portion of inference compute to smaller models running on edge, only using the larger models when necessary.
           </p>
         </Modal>
       </div>

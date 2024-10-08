@@ -1,4 +1,4 @@
-# EdgeLLM
+# HybridLLM
 
 Mixture-of-Depths Across Edge and API Models.
 
