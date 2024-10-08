@@ -64,12 +64,7 @@ class DynamicModel:
         }
 
         if completion_metadata:
-            chunk["usage"] = (
-                {
-                    "prompt_tokens": completion_metadata["prompt_tokens"],
-                    "completion_tokens": completion_metadata["completion_tokens"],
-                },
-            )
+            chunk["usage"] = completion_metadata
 
         return chunk
 
@@ -80,7 +75,7 @@ class DynamicModel:
         generated = input_ids.clone()
         temperature = TEMPERATURE
 
-        small_wrapper = LocalModelEngine(
+        small_engine = LocalModelEngine(
             tokenizer=self.tokenizer,
             model_id=MODEL_SMALL_ID,
             model_type=ModelType.SMALL,
@@ -89,7 +84,7 @@ class DynamicModel:
             max_tokens=MAX_NEW_TOKENS,
             temperature=temperature,
         )
-        large_wrapper = (
+        large_engine = (
             LocalModelEngine(
                 tokenizer=self.tokenizer,
                 model_id=MODEL_LARGE_ID,
@@ -110,22 +105,37 @@ class DynamicModel:
             )
         )
 
-        # init both models
-        small_entropy, small_varentropy = await small_wrapper.init_model(input_ids)
-        large_entropy, large_varentropy = await large_wrapper.init_model(input_ids)
+        large_model_initialized = False
 
-        # start with the model with lower entropy
-        current_wrapper = (
-            small_wrapper if small_entropy < large_entropy else large_wrapper
-        )
+        # init both models
+        _, _ = await small_engine.init_model(input_ids)
+        current_engine = small_engine
 
         tokens_since_last_switch = 0
         total_tokens_generated = 0
 
+        prompt_tokens = input_ids.numel()
+        usage_metadata = {
+            "small_model": {"prompt_tokens": prompt_tokens, "completion_tokens": 0},
+            "large_model": {"prompt_tokens": 0, "completion_tokens": 0},
+        }
+
         while total_tokens_generated < MAX_NEW_TOKENS:
             switch_occurred = False
 
-            async for action in current_wrapper.stream_generate(
+            if current_engine.model_type == ModelType.LARGE and not large_model_initialized:
+                _, _ = await large_engine.init_model(input_ids)
+                large_model_initialized = True
+                usage_metadata["large_model"]["prompt_tokens"] = prompt_tokens
+                print(f"{RED}*Initialized large model*{RESET}", end="", flush=True)
+
+            model_used_key = "small_model" if current_engine.model_type == ModelType.SMALL else "large_model"
+            other_model_key = "large_model" if model_used_key == "small_model" else "small_model"
+
+            # Add the tokens_since_last_switch to the other model's prompt_tokens
+            # usage_metadata[other_model_key]["prompt_tokens"] += tokens_since_last_switch
+
+            async for action in current_engine.stream_generate(
                 generated_ids=generated,
                 tokens_generated=total_tokens_generated,
                 tokens_to_reprocess=tokens_since_last_switch,
@@ -133,26 +143,27 @@ class DynamicModel:
                 if "action" in action:
                     if action["action"] == "switch_to_small":
                         # Switch to small model
-                        current_wrapper = small_wrapper
+                        current_engine = small_engine
                         switch_occurred = True
                         break  # Break to restart the loop with the new model
 
                     elif action["action"] == "switch_to_large":
                         # Switch to large model
-                        current_wrapper = large_wrapper
+                        current_engine = large_engine
                         switch_occurred = True
                         break  # Break to restart the loop with the new model
 
                     elif action["action"] == "done":
                         chunk = self._prepare_chunk(
                             decoded_token="",
-                            model=current_wrapper.model_id,
+                            model=current_engine.model_id,
                             finish_reason="STOP",
-                            model_type=current_wrapper.model_type,
+                            model_type=current_engine.model_type,
                             completion_metadata={
                                 "prompt_tokens": input_ids.numel(),
                                 "completion_tokens": generated.numel()
                                 - input_ids.numel(),
+                                "by_model": usage_metadata,
                             },
                         )
 
@@ -167,9 +178,12 @@ class DynamicModel:
                     total_tokens_generated += 1
 
                     color = (
-                        BLUE if current_wrapper.model_type == ModelType.SMALL else RED
+                        BLUE if current_engine.model_type == ModelType.SMALL else RED
                     )
                     print(f"{color}{decoded_token}{RESET}", end="", flush=True)
+
+                    model_used_key = "small_model" if current_engine.model_type == ModelType.SMALL else "large_model"
+                    usage_metadata[model_used_key]["completion_tokens"] += 1
 
                     # Append the new token to the generated sequence
                     generated = torch.cat(
@@ -179,8 +193,8 @@ class DynamicModel:
 
                     chunk = self._prepare_chunk(
                         decoded_token=decoded_token,
-                        model=current_wrapper.model_id,
-                        model_type=current_wrapper.model_type,
+                        model=current_engine.model_id,
+                        model_type=current_engine.model_type,
                     )
 
                     yield f"data: {json.dumps(chunk)}\n\n"
@@ -189,12 +203,13 @@ class DynamicModel:
                 if total_tokens_generated >= MAX_NEW_TOKENS:
                     chunk = self._prepare_chunk(
                         decoded_token="",
-                        model=current_wrapper.model_id,
+                        model=current_engine.model_id,
                         finish_reason="MAX_TOKENS",
-                        model_type=current_wrapper.model_type,
+                        model_type=current_engine.model_type,
                         completion_metadata={
                             "prompt_tokens": input_ids.numel(),
                             "completion_tokens": generated.numel() - input_ids.numel(),
+                            "by_model": usage_metadata,
                         },
                     )
                     yield f"data: {json.dumps(chunk)}\n\n"
@@ -205,7 +220,7 @@ class DynamicModel:
             if switch_occurred:
                 # Allow the new model to reprocess the tokens generated since the last switch
                 # Do not reset tokens_since_last_switch here; it should be processed by the new model
-                continue  # Restart the loop with the new current_wrapper
+                continue  # Restart the loop with the new current_engine
 
                 # If no switch occurred, reset tokens_since_last_switch
             tokens_since_last_switch = 0

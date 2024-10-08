@@ -4,3 +4,4 @@ export { Switch } from './switch';
 export { Textarea } from './textarea';
 export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent } from './card';
 export { Modal } from './modal';
+export { Label } from './label';
