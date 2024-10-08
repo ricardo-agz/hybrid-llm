@@ -101,7 +101,9 @@ async def init_cloud_model(
 async def stream_chat_cloud(
     request_id: str = Body(..., description="The unique request ID"),
     curr_prompt: str = Body(..., description="The ongoing prompt generation"),
-    prompt_substr_to_reprocess: str = Body(..., description="The prompt substring to reprocess"),
+    prompt_substr_to_reprocess: str = Body(
+        ..., description="The prompt substring to reprocess"
+    ),
     entropy_threshold: float = Body(
         ..., description="Entropy threshold to switch back"
     ),
@@ -122,8 +124,12 @@ async def stream_chat_cloud(
                     status_code=400, detail="Model not initialized for this request_id"
                 )
 
-            generated_ids = tokenizer(curr_prompt, return_tensors="pt").input_ids.to(device)
-            new_prompt_substr_token_ids = tokenizer(prompt_substr_to_reprocess, return_tensors="pt").input_ids.to(device)
+            generated_ids = tokenizer(curr_prompt, return_tensors="pt").input_ids.to(
+                device
+            )
+            new_prompt_substr_token_ids = tokenizer(
+                prompt_substr_to_reprocess, return_tensors="pt"
+            ).input_ids.to(device)
             num_tokens_to_reprocess = new_prompt_substr_token_ids.size(1)
 
             # generated_ids_tensor = torch.tensor([generated_ids], device=device)

@@ -17,13 +17,13 @@ from config import (
 
 class APIModelEngine(BaseModelEngine):
     def __init__(
-            self,
-            model_id: str,
-            tokenizer: PreTrainedTokenizer,
-            device: torch.device,
-            entropy_thresholds: dict,
-            max_tokens: int = 512,
-            temperature: float = 0.7,
+        self,
+        model_id: str,
+        tokenizer: PreTrainedTokenizer,
+        device: torch.device,
+        entropy_thresholds: dict,
+        max_tokens: int = 512,
+        temperature: float = 0.7,
     ):
         super().__init__(
             model_type=ModelType.LARGE,
@@ -52,13 +52,17 @@ class APIModelEngine(BaseModelEngine):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                        f"{EDGE_CLOUD_URL}/init-cloud-model",
-                        json=payload,
-                        timeout=aiohttp.ClientTimeout(total=30)  # Set an appropriate timeout
+                    f"{EDGE_CLOUD_URL}/init-cloud-model",
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(
+                        total=30
+                    ),  # Set an appropriate timeout
                 ) as response:
                     if response.status != 200:
                         text = await response.text()
-                        raise Exception(f"Failed to initialize cloud model: {response.status}, {text}")
+                        raise Exception(
+                            f"Failed to initialize cloud model: {response.status}, {text}"
+                        )
 
                     data = await response.json()
 
@@ -71,10 +75,10 @@ class APIModelEngine(BaseModelEngine):
             raise Exception(f"HTTP request failed: {e}")
 
     async def stream_generate(
-            self,
-            generated_ids: torch.Tensor,
-            tokens_generated: int,
-            tokens_to_reprocess: int,
+        self,
+        generated_ids: torch.Tensor,
+        tokens_generated: int,
+        tokens_to_reprocess: int,
     ) -> AsyncGenerator[dict, None]:
         """
         Streams tokens by making a request to the cloud API.
@@ -103,12 +107,13 @@ class APIModelEngine(BaseModelEngine):
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
-                        f"{EDGE_CLOUD_URL}/stream-chat-cloud",
-                        json=payload
+                    f"{EDGE_CLOUD_URL}/stream-chat-cloud", json=payload
                 ) as resp:
                     if resp.status != 200:
                         text = await resp.text()
-                        raise Exception(f"Failed to stream chat cloud: {resp.status}, {text}")
+                        raise Exception(
+                            f"Failed to stream chat cloud: {resp.status}, {text}"
+                        )
 
                     # aiohttp provides an asynchronous iterator over the response content
                     async for line_bytes in resp.content:
@@ -117,13 +122,15 @@ class APIModelEngine(BaseModelEngine):
                             continue
 
                         if line.startswith("data: "):
-                            data_str = line[len("data: "):]
+                            data_str = line[len("data: ") :]
                             if data_str == "[DONE]":
                                 break
                             try:
                                 data = json.loads(data_str)
                                 if "error" in data:
-                                    raise Exception(f"Error from cloud: {data['error']}")
+                                    raise Exception(
+                                        f"Error from cloud: {data['error']}"
+                                    )
 
                                 elif "action" in data:
                                     if data["action"] == "switch_to_local":
