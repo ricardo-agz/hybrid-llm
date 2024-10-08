@@ -21,7 +21,7 @@ Install requirements
 pip install -r requirements.txt
 ```
 
-CD into the `edge-llm` directory
+CD into the `hybrid_llm` directory
 
 ### Running through the CLI
 ```bash
@@ -37,7 +37,7 @@ python serve_cloud_model.py
 
 Running the main server
 ```bash
-python main.py
+python server.py
 ```
 
 ### Running the GUI
